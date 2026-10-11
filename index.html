@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prueba CRUD Google Apps Script - Cuentas</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 30px auto; padding: 20px; background: #f4f4f9; }
+        .card { background: white; padding: 20px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        input, select { padding: 8px; margin: 5px 5px 15px 0; width: calc(50% - 12px); box-sizing: border-box; }
+        button { background: #1a73e8; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #1557b0; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background: #1a73e8; color: white; }
+        .loader { display: none; color: #1a73e8; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <h2>Gestión de Cuentas (CRUD Externo)</h2>
+    <div id="loader" class="loader">Procesando petición con Google Apps Script...</div>
+
+    <!-- Formulario Crear / Actualizar -->
+    <div class="card">
+        <h3 id="form-title">Crear Nueva Cuenta</h3>
+        <input type="hidden" id="cuenta-id">
+        <label>Nombre de cuenta:</label><br>
+        <input type="text" id="nombre" placeholder="Ej. Cuenta Corriente Bancolombia" style="width: 100%;"><br>
+        
+        <label>Tipo:</label><br>
+        <input type="text" id="tipo" placeholder="Ej. Banco / Efectivo / Activo" style="width: 100%;"><br>
+        
+        <button onclick="guardarCuenta()">Guardar Cuenta</button>
+        <button onclick="limpiarFormulario()" style="background: #6c757d;">Cancelar / Limpiar</button>
+    </div>
+
+    <!-- Listado -->
+    <div class="card">
+        <h3>Listado de Cuentas</h3>
+        <button onclick="cargarCuentas()" style="margin-bottom: 10px;">Actualizar Tabla</button>
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Nombre de cuenta</th>
+                    <th>Tipo</th>
+                    <th>Acciones</th>
+                </tr>
+            Ref</thead>
+            <tbody id="tabla-cuerpo">
+                <tr><td colspan="4" style="text-align: center;">Cargando datos...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        // ⚠️ PEGA AQUÍ LA URL DE TU APLICACIÓN WEB DE GOOGLE APPS SCRIPT
+        const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyiOlOgcjCKicXemCXEROxyKnol1sjLL4CA8uSIczD8qFpL40S_uaRpbBz5sp_lhtX-/exec";
+
+        function mostrarLoader(visible) {
+            document.getElementById('loader').style.display = visible ? 'block' : 'none';
+        }
+
+        // READ (GET)
+        async function cargarCuentas() {
+            mostrarLoader(true);
+            try {
+                let respuesta = await fetch(WEB_APP_URL);
+                let resultado = await respuesta.json();
+                
+                let tbody = document.getElementById('tabla-cuerpo');
+                tbody.innerHTML = "";
+                
+                if (resultado.status === "success" && resultado.data.length > 0) {
+                    resultado.data.forEach(item => {
+                        let tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td>${item["ID"]}</td>
+                            <td>${item["Nombre de cuenta"]}</td>
+                            <td>${item["Tipo"]}</td>
+                            <td>
+                                <button onclick="prepararActualizacion('${item["ID"]}', '${item["Nombre_de_cuenta"] || item["Nombre de cuenta"]}', '${item["Tipo"]}')">Editar</button>
+                                <button onclick="eliminarCuenta('${item["ID"]}')" style="background: #dc3545;">Eliminar</button>
+                            </td>
+                        `;
+                        // Ajuste seguro para lectura de propiedades con espacios
+                        tr.cells[1].innerText = item["Nombre de cuenta"];
+                        tbody.appendChild(tr);
+                    });
+                } else {
+                    tbody.innerHTML = `<tr><td colspan="4" style="text-align: center;">No hay registros encontrados o la hoja se está creando.</td></tr>`;
+                }
+            } catch (error) {
+                alert("Error al cargar datos: " + error);
+            } finally {
+                mostrarLoader(false);
+            }
+        }
+
+        // CREATE / UPDATE (POST)
+        async function guardarCuenta() {
+            let id = document.getElementById('cuenta-id').value;
+            let nombre = document.getElementById('nombre').value;
+            let tipo = document.getElementById('tipo').value;
+
+            if (!nombre || !tipo) {
+                alert("Por favor completa todos los campos.");
+                return;
+            }
+
+            let action = id ? "update" : "create";
+            let payload = { action, id, nombre, tipo };
+
+            mostrarLoader(true);
+            try {
+                // Nota: Google Apps Script redirige peticiones POST, por lo que mode: 'no-cors' puede bloquear lectura de respuesta,
+                // sin embargo, configurando el script como 'Cualquiera' con redirecciones estándar funciona perfectamente con fetch normal si se maneja CORS adecuadamente.
+                let respuesta = await fetch(WEB_APP_URL, {
+                    method: "POST",
+                    body: JSON.stringify(payload)
+                });
+                
+                let resultado = await respuesta.json();
+                if (resultado.status === "success") {
+                    alert(resultado.message);
+                    limpiarFormulario();
+                    cargarCuentas();
+                } else {
+                    alert("Error: " + resultado.message);
+                }
+            } catch (error) {
+                alert("Error en la petición POST: " + error);
+            } finally {
+                mostrarLoader(false);
+            }
+        }
+
+        function prepararActualizacion(id, nombre, tipo) {
+            document.getElementById('cuenta-id').value = id;
+            document.getElementById('nombre').value = nombre;
+            document.getElementById('tipo').value = tipo;
+            document.getElementById('form-title').innerText = "Actualizar Cuenta (ID: " + id + ")";
+        }
+
+        function limpiarFormulario() {
+            document.getElementById('cuenta-id').value = "";
+            document.getElementById('nombre').value = "";
+            document.getElementById('tipo').value = "";
+            document.getElementById('form-title').innerText = "Crear Nueva Cuenta";
+        }
+
+        // DELETE (POST)
+        async function eliminarCuenta(id) {
+            if (!confirm("¿Estás seguro de eliminar la cuenta con ID: " + id + "?")) return;
+
+            let payload = { action: "delete", id: id };
+            mostrarLoader(true);
+
+            try {
+                let respuesta = await fetch(WEB_APP_URL, {
+                    method: "POST",
+                    body: JSON.stringify(payload)
+                });
+                let resultado = await respuesta.json();
+                
+                if (resultado.status === "success") {
+                    alert(resultado.message);
+                    cargarCuentas();
+                } else {
+                    alert("Error: " + resultado.message);
+                }
+            } catch (error) {
+                alert("Error al eliminar: " + error);
+            } finally {
+                mostrarLoader(false);
+            }
+        }
+
+        // Cargar registros al abrir la página
+        window.onload = cargarCuentas;
+    </script>
+</body>
+</html>
